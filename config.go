@@ -37,6 +37,7 @@ type NatsConfig struct {
 	User     string
 	Password string
 	Token    string
+	Group    string
 }
 
 func NewConfigFromFile(filename string) (*Config, error) {

@@ -66,7 +66,7 @@ func subscribe(c *Config) (*nats.Subscription, error) {
 	if err != nil {
 		return nil, errors.Errorf("can't connect nats: %v", err)
 	}
-	return con.ChanSubscribe(c.Nats.Subject, msgCh)
+	return con.ChanQueueSubscribe(c.Nats.Subject, c.Nats.Group, msgCh)
 }
 func createTable(c *Config) error {
 	connect, err := sql.Open("clickhouse", c.ClickHouse.Dsn)
