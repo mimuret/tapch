@@ -117,8 +117,8 @@ func dropTable(c *Config) error {
 			continue
 		}
 		du := t.Sub(time.Now())
-		if du > time.Duration(c.ClickHouse.SaveHour)*time.Hour {
-			log.Debugf("drop table %s", tn)
+		if t.Before(time.Now()) && du > time.Duration(c.ClickHouse.SaveHour)*time.Hour {
+			log.Debugf("drop table %s, %v", tn, du)
 			drop = append(drop, tn)
 		}
 	}
