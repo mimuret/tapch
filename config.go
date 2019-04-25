@@ -27,8 +27,9 @@ type Config struct {
 }
 
 type ClickHouseConfig struct {
-	Dsn    string
-	Prefix string
+	Dsn      string
+	Prefix   string
+	SaveHour int
 }
 
 type NatsConfig struct {
@@ -44,6 +45,7 @@ func NewConfigFromFile(filename string) (*Config, error) {
 	c := Config{}
 	v := viper.New()
 	v.SetConfigFile(filename)
+
 	v.SetConfigType("toml")
 	if err := v.ReadInConfig(); err != nil {
 		return nil, errors.Wrap(err, "can't read config")
