@@ -17,19 +17,121 @@
 package main
 
 import (
+	"bytes"
+	"html/template"
+	"io/ioutil"
+	"os"
+
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	ClickHouse ClickHouseConfig
-	Nats       NatsConfig
+	ClickHouse       ClickHouseConfig
+	Nats             NatsConfig
+	WorkerNum        int
+	QueueSize        int
+	PropPort         int
+	PrometheusListen string
+}
+
+type TemplateVal struct {
+	TableName string
+	Engine    string
+}
+
+func (c *Config) GetWorkerNum() int {
+	if c.WorkerNum <= 0 {
+		return 1
+	}
+	return c.WorkerNum
+}
+func (c *Config) GetQueueSize() int {
+	if c.QueueSize <= 65535 {
+		return 65535
+	}
+	return c.QueueSize
+}
+func (c *Config) GetPrometheusListen() string {
+	if c.PrometheusListen == "" {
+		return ":9520"
+	}
+	return c.PrometheusListen
 }
 
 type ClickHouseConfig struct {
-	Dsn      string
-	Prefix   string
-	SaveHour int
+	Dsn                 string
+	Prefix              string
+	SaveHour            int
+	WorkerNum           int
+	CreateDistributed   bool
+	CreateTableTemplate string
+}
+
+func (c *ClickHouseConfig) GetWorkerNum() int {
+	if c.WorkerNum <= 0 {
+		return 1
+	}
+	return c.WorkerNum
+}
+func (c *ClickHouseConfig) GetCreateTableSql(tn string, engine string) (string, error) {
+	var tmplStr string
+	if c.CreateTableTemplate != "" {
+		r, err := os.Open(c.CreateTableTemplate)
+		if err != nil {
+			return "", err
+		}
+		bs, err := ioutil.ReadAll(r)
+		if err != nil {
+			return "", err
+		}
+		tmplStr = string(bs)
+	} else {
+		tmplStr = `CREATE TABLE IF NOT EXISTS {{ .TableName }} (
+			id UUID,
+			timestamp DateTime,
+			query_time DateTime,
+			query_address FixedString(40),
+			query_port UInt16,
+			response_time DateTime,
+			response_address FixedString(40),
+			response_port UInt16,
+			response_zone String,
+			identity String,
+			type String,
+			socket_family String,
+			socket_protocol String,
+			version String,
+			extra String,
+			tld String,
+			sld String,
+			third_ld String,
+			fourth_ld String,
+			qname String,
+			qclass String,
+			qtype String,
+			message_size UInt16,
+			txid UInt16,
+			rcode String,
+			aa UInt8,
+			tc UInt8,
+			rd UInt8,
+			ra UInt8,
+			ad UInt8,
+			cd UInt8
+		) engine={{ .Engine }}`
+	}
+	tmpl, err := template.New("sql").Parse(tmplStr)
+	if err != nil {
+		return "", err
+	}
+	val := TemplateVal{TableName: tn, Engine: engine}
+	b := bytes.NewBuffer(nil)
+	err = tmpl.Execute(b, val)
+	if err != nil {
+		return "", err
+	}
+	return b.String(), nil
 }
 
 type NatsConfig struct {

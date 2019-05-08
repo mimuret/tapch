@@ -17,24 +17,13 @@
 package main
 
 import (
-	_ "github.com/mailru/go-clickhouse"
-
-	"github.com/nats-io/go-nats"
-	"github.com/pkg/errors"
+	"time"
 )
 
-func subscribe(c *Config) (*nats.Subscription, error) {
-	var err error
-	var con *nats.Conn
-	if c.Nats.Token != "" {
-		con, err = nats.Connect(c.Nats.Host, nats.Token(c.Nats.Token))
-	} else if c.Nats.User != "" {
-		con, err = nats.Connect(c.Nats.Host, nats.UserInfo(c.Nats.User, c.Nats.Password))
-	} else {
-		con, err = nats.Connect(c.Nats.Host)
-	}
+func toMySQLDateTime(in string) string {
+	t, err := time.Parse(time.RFC3339Nano, in)
 	if err != nil {
-		return nil, errors.Errorf("can't connect nats: %v", err)
+		return "1970-01-01 00:00:01"
 	}
-	return con.ChanQueueSubscribe(c.Nats.Subject, c.Nats.Group, msgCh)
+	return t.Format("2006-01-02 15:04:05")
 }

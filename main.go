@@ -23,9 +23,18 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
+	"sync"
 	"syscall"
 
+	"net/http"
+	_ "net/http/pprof"
+	"runtime/debug"
+
 	_ "github.com/mailru/go-clickhouse"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/nats-io/go-nats"
 	log "github.com/sirupsen/logrus"
@@ -35,7 +44,7 @@ var msgCh chan *nats.Msg
 
 func init() {
 	log.SetOutput(os.Stdout)
-	log.SetLevel(log.InfoLevel)
+	log.SetLevel(log.DebugLevel)
 }
 
 var (
@@ -48,10 +57,29 @@ func usage() {
 	flag.PrintDefaults()
 }
 
+var (
+	SubscribeMessages = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "tapch_subscribe_messages",
+		Help: "The total number of input messages",
+	})
+	LostMessages = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "tapch_lost_messages",
+		Help: "The total number of lost messages",
+	})
+)
+
+func PrometheusExporter(ctx context.Context, listen string) {
+	http.Handle("/metrics", promhttp.Handler())
+	err := http.ListenAndServe(listen, nil)
+	if err != nil {
+		log.Error(err)
+	}
+}
+
 func main() {
 	var err error
+	debug.FreeOSMemory()
 
-	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Usage = usage
 	flag.Parse()
 	// set log level
@@ -74,40 +102,57 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	msgCh = make(chan *nats.Msg, 65535)
+	if c.PropPort > 0 {
+		go func() {
+			log.Println(http.ListenAndServe("localhost:"+strconv.Itoa(c.PropPort), nil))
+		}()
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	sub, err := subscribe(c)
-	if err != nil {
-		log.Fatal(err)
+	go PrometheusExporter(ctx, c.GetPrometheusListen())
+
+	workerNum := c.GetWorkerNum() * (c.ClickHouse.GetWorkerNum() + 2)
+	if workerNum > runtime.NumCPU() {
+		workerNum = runtime.NumCPU()
 	}
-	err = createTable(c)
-	if err != nil {
-		log.Fatalf("can't create table: %v", err)
+	runtime.GOMAXPROCS(workerNum)
+
+	utilWorker := NewUtilWorker(c)
+	if err := utilWorker.Prepare(); err != nil {
+		log.Fatalf("faild to prepare database: %v", err)
 	}
-	err = dropTable(c)
-	if err != nil {
-		log.Fatalf("can't drop table: %v", err)
+	go func() {
+		utilWorker.Run(ctx)
+	}()
+
+	wg := sync.WaitGroup{}
+	for i := 0; i < workerNum; i++ {
+		worker := NewWorker(c)
+		wg.Add(1)
+		log.Debugf("start worker %d", i)
+		go func() {
+			if err := worker.Run(ctx); err != nil {
+				log.Error(err)
+			}
+			wg.Done()
+		}()
 	}
 
-	go func() {
-		if err := createNextTable(ctx, c); err != nil {
-			log.Fatal(err)
-		}
-	}()
-	go func() {
-		if err := pushRecord(ctx, c); err != nil {
-			log.Fatal(err)
-		}
-	}()
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM)
 	log.WithFields(log.Fields{
 		"func": "serv",
 	}).Info("start server")
 
-	<-sigCh
+	endCh := make(chan struct{})
+	go func() {
+		wg.Wait()
+		endCh <- struct{}{}
+	}()
 
-	cancel()
-	sub.Unsubscribe()
-	sub.Drain()
+	select {
+	case <-endCh:
+	case <-sigCh:
+		cancel()
+	}
+	wg.Wait()
 }
