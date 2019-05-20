@@ -26,6 +26,41 @@ import (
 	"github.com/spf13/viper"
 )
 
+var DefaultSQLTemplate = `CREATE TABLE IF NOT EXISTS {{ .TableName }} (
+	id UUID,
+	timestamp DateTime,
+	query_time DateTime,
+	query_address String,
+	query_port UInt16,
+	response_time DateTime,
+	response_address String,
+	response_port UInt16,
+	response_zone String,
+	ecs_net String,
+	identity String,
+	type String,
+	socket_family String,
+	socket_protocol String,
+	version String,
+	extra String,
+	tld String,
+	sld String,
+	third_ld String,
+	fourth_ld String,
+	qname String,
+	qclass String,
+	qtype String,
+	message_size UInt16,
+	txid UInt16,
+	rcode String,
+	aa UInt8,
+	tc UInt8,
+	rd UInt8,
+	ra UInt8,
+	ad UInt8,
+	cd UInt8
+) engine={{ .Engine }}`
+
 type Config struct {
 	ClickHouse       ClickHouseConfig
 	Nats             NatsConfig
@@ -75,7 +110,7 @@ func (c *ClickHouseConfig) GetWorkerNum() int {
 	return c.WorkerNum
 }
 func (c *ClickHouseConfig) GetCreateTableSql(tn string, engine string) (string, error) {
-	var tmplStr string
+	var tmplStr = DefaultSQLTemplate
 	if c.CreateTableTemplate != "" {
 		r, err := os.Open(c.CreateTableTemplate)
 		if err != nil {
@@ -86,40 +121,6 @@ func (c *ClickHouseConfig) GetCreateTableSql(tn string, engine string) (string, 
 			return "", err
 		}
 		tmplStr = string(bs)
-	} else {
-		tmplStr = `CREATE TABLE IF NOT EXISTS {{ .TableName }} (
-			id UUID,
-			timestamp DateTime,
-			query_time DateTime,
-			query_address FixedString(40),
-			query_port UInt16,
-			response_time DateTime,
-			response_address FixedString(40),
-			response_port UInt16,
-			response_zone String,
-			identity String,
-			type String,
-			socket_family String,
-			socket_protocol String,
-			version String,
-			extra String,
-			tld String,
-			sld String,
-			third_ld String,
-			fourth_ld String,
-			qname String,
-			qclass String,
-			qtype String,
-			message_size UInt16,
-			txid UInt16,
-			rcode String,
-			aa UInt8,
-			tc UInt8,
-			rd UInt8,
-			ra UInt8,
-			ad UInt8,
-			cd UInt8
-		) engine={{ .Engine }}`
 	}
 	tmpl, err := template.New("sql").Parse(tmplStr)
 	if err != nil {

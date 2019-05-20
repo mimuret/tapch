@@ -109,6 +109,7 @@ func (u *UtilWorker) dropTable() error {
 	}
 	drop := []string{}
 	defer rows.Close()
+	loc, _ := time.LoadLocation("Asia/Tokyo")
 	for rows.Next() {
 		var tn string
 		err := rows.Scan(&tn)
@@ -120,11 +121,8 @@ func (u *UtilWorker) dropTable() error {
 			continue
 		}
 		lt := strings.Join(l[len(l)-2:], "_")
-    loc, _ := time.LoadLocation("Asia/Tokyo")
 		t, err := time.ParseInLocation("20060102_1504", lt, loc)
 		if err != nil {
-			log.Debugf("error parse table: %s,%s", tn, lt)
-			log.Debugf("error parse table: %v", err)
 			continue
 		}
 		du := time.Now().Sub(t)
