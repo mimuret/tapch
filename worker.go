@@ -111,7 +111,7 @@ L:
 					r.ResponseAddress,
 					r.ResponsePort,
 					r.ResponseZone,
-					r.EcsNet,
+					r.EcsNet.String(),
 					r.Identity,
 					r.Type,
 					r.SocketFamily,
