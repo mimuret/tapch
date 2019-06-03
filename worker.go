@@ -97,7 +97,7 @@ L:
 			}
 			tableName := c.ClickHouse.Prefix + "_" + time.Now().Format("20060102_1504")
 
-			stmt, err := tx.Prepare("INSERT INTO " + tableName + " (timestamp,query_time,query_address,query_port,response_time,response_address,response_port,response_zone,ecs_net,identity,type,socket_family,socket_protocol,version,extra,tld,sld,third_ld,fourth_ld,qname,qclass,qtype,message_size,txid,rcode,aa,tc,rd,ra,ad,cd) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+			stmt, err := tx.Prepare("INSERT INTO " + tableName + " (timestamp,query_time,query_address,query_address_hash,query_port,response_time,response_address,response_address_hash,response_port,response_zone,ecs_net,identity,type,socket_family,socket_protocol,version,extra,tld,sld,third_ld,fourth_ld,qname,qclass,qtype,message_size,txid,rcode,aa,tc,rd,ra,ad,cd) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
 			if err != nil {
 				log.Errorf("can't prepare statement: %v", err)
 			}
@@ -106,9 +106,11 @@ L:
 					toMySQLDateTime(r.Timestamp),
 					toMySQLDateTime(r.QueryTime),
 					r.QueryAddress,
+					r.QueryAddressHash,
 					r.QueryPort,
 					toMySQLDateTime(r.ResponseTime),
 					r.ResponseAddress,
+					r.ResponseAddressHash,
 					r.ResponsePort,
 					r.ResponseZone,
 					r.EcsNet.String(),
